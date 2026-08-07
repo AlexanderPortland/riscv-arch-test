@@ -53,27 +53,54 @@
 RVTEST_BEGIN
 
 //---------------------------------------------------------------------------------------------------------------------------------
+// Set mstatus.MPRV=1 and mstatus.MPP=Umode, so that M-mode loads and stores are
+// translated and protected as though the current privilege mode were U.
+//
+// This must be re-applied before every access under test: a trap taken to M-mode
+// overwrites mstatus.MPP with the interrupted privilege mode, so the pair does not
+// survive a faulting access.
+.macro SET_MPRV_UMODE
+  LI(   t0, MSTATUS_MPRV)
+  csrs  mstatus, t0           // mstatus.MPRV = 1
+  LI(   t0, MSTATUS_MPP)
+  csrc  mstatus, t0           // mstatus.MPP  = Umode (0b00)
+.endm
+
 // Test RWX permissions
-.macro VERIFICATION_RWX TEST_CASE
+//
+// When MPRV=1 the accesses execute in M-mode with an effective privilege of U, so
+// mstatus.MPRV/MPP are re-established before each one. The execute case is skipped
+// in that mode because mstatus.MPRV does not affect instruction fetch.
+.macro VERIFICATION_RWX TEST_CASE, MPRV=0
   addi a2, a2, 16
 
   // Test store permission
+  .if \MPRV
+    SET_MPRV_UMODE
+  .endif
   \TEST_CASE\()_store:
   sw  a2, 20(a5)
   nop
 
   // Test load permission
+  .if \MPRV
+    SET_MPRV_UMODE
+  .endif
   \TEST_CASE\()_load:
   lw a3, 20(a5)
   nop
 
-  // Test execute permission
-  \TEST_CASE\()_exec:
-  jalr ra, a5, 0
-  nop
+  .if \MPRV == 0
+    // Test execute permission
+    \TEST_CASE\()_exec:
+    jalr ra, a5, 0
+    nop
+  .endif
 .endm
 
-.macro TEST_CASES_RUNNER QUAL, VA, level, TEST_CASE
+// Pass MPRV=1 to run the accesses from M-mode with an effective privilege of U
+// (mstatus.MPRV set, mstatus.MPP=Umode) instead of dropping into U-mode.
+.macro TEST_CASES_RUNNER QUAL, VA, level, TEST_CASE, MPRV=0
 
   // Set or clear senvcfg.UKTE for this test case.
   LI(t0, SENVCFG_UKTE)
@@ -95,78 +122,29 @@ RVTEST_BEGIN
   LI(a3, 0xdeadbeef)
   LI(a4, 0xdeadbeef)
 
-  RVTEST_GOTO_LOWER_MODE Umode
+  .if \MPRV
+    // Stay in M-mode; the effective privilege of each access comes from
+    // mstatus.MPRV/MPP instead.
+    VERIFICATION_RWX \TEST_CASE, \MPRV
 
-  VERIFICATION_RWX \TEST_CASE
+    // Clear mstatus.MPRV so the signature stores below are translated as M-mode
+    // accesses rather than being Svukte-qualified themselves.
+    LI(   t0, MSTATUS_MPRV)
+    csrc  mstatus, t0
+  .else
+    RVTEST_GOTO_LOWER_MODE Umode
 
-  RVTEST_GOTO_MMODE
+    VERIFICATION_RWX \TEST_CASE, \MPRV
+
+    RVTEST_GOTO_MMODE
+  .endif
 
   // Signature Update
   RVTEST_SIGUPD(x2, x5, x4, a2, \TEST_CASE\()_store, \TEST_CASE\()_store_str)
   RVTEST_SIGUPD(x2, x5, x4, a3, \TEST_CASE\()_load, \TEST_CASE\()_load_str)
-  RVTEST_SIGUPD(x2, x5, x4, a4, \TEST_CASE\()_exec, \TEST_CASE\()_exec_str)
-.endm
-
-//---------------------------------------------------------------------------------------------------------------------------------
-// Set mstatus.MPRV=1 and mstatus.MPP=Umode, so that M-mode loads and stores are
-// translated and protected as though the current privilege mode were U.
-//
-// This must be re-applied before every access under test: a trap taken to M-mode
-// overwrites mstatus.MPP with the interrupted privilege mode, so the pair does not
-// survive a faulting access.
-.macro SET_MPRV_UMODE
-  LI(   t0, MSTATUS_MPRV)
-  csrs  mstatus, t0           // mstatus.MPRV = 1
-  LI(   t0, MSTATUS_MPP)
-  csrc  mstatus, t0           // mstatus.MPP  = Umode (0b00)
-.endm
-
-// Test RW permissions from M-mode using MPRV, without ever dropping privilege.
-//
-// mstatus.MPRV does not affect instruction fetch, so only sw/lw are exercised
-// here; there is no jalr case.
-.macro MPRV_TEST_CASES_RUNNER QUAL, VA, level, TEST_CASE
-
-  // Set or clear senvcfg.UKTE for this test case.
-  LI(t0, SENVCFG_UKTE)
-  .ifc \QUAL, Qualified
-    csrs senvcfg, t0
-  .else
-    csrc senvcfg, t0
+  .if \MPRV == 0
+    RVTEST_SIGUPD(x2, x5, x4, a4, \TEST_CASE\()_exec, \TEST_CASE\()_exec_str)
   .endif
-
-  // Adjust offset of VA to point to the test region.
-  .set VA_SHIFT, (\level*9)+12
-  LI(a5, (\VA>>VA_SHIFT)<<VA_SHIFT)
-  LA(a0, rvtest_data_1)
-  slli a0, a0, 64-VA_SHIFT
-  srli a0, a0, 64-VA_SHIFT
-  add  a5, a5, a0             // Virtual Address
-
-  // Initialize result register so a fault leaves its sentinel unchanged.
-  LI(a3, 0xdeadbeef)
-  addi a2, a2, 16
-
-  // Test store permission
-  SET_MPRV_UMODE
-  \TEST_CASE\()_store:
-  sw  a2, 20(a5)
-  nop
-
-  // Test load permission
-  SET_MPRV_UMODE
-  \TEST_CASE\()_load:
-  lw  a3, 20(a5)
-  nop
-
-  // Clear mstatus.MPRV so the signature stores below are translated as M-mode
-  // accesses rather than being Svukte-qualified themselves.
-  LI(   t0, MSTATUS_MPRV)
-  csrc  mstatus, t0
-
-  // Signature Update
-  RVTEST_SIGUPD(x2, x5, x4, a2, \TEST_CASE\()_store, \TEST_CASE\()_store_str)
-  RVTEST_SIGUPD(x2, x5, x4, a3, \TEST_CASE\()_load,  \TEST_CASE\()_load_str)
 .endm
 
 
@@ -231,10 +209,10 @@ main:
 //---------------------------------------------------------------------------------------------------------------------------------
 
   // Test case 9: UKTE disabled | Test in M-Mode w/ MPRV | valid RWXU PTE | expected = no fault
-  MPRV_TEST_CASES_RUNNER Unqualified, va_data, LEVEL2, test9
+  TEST_CASES_RUNNER Unqualified, va_data, LEVEL2, test9, 1
 
   // Test case 10: UKTE enabled | Test in M-Mode w/ MPRV | valid RWXU PTE | expected = RW fault
-  MPRV_TEST_CASES_RUNNER Qualified, va_data, LEVEL2, test10
+  TEST_CASES_RUNNER Qualified, va_data, LEVEL2, test10, 1
 
 //---------------------------------------------------------------------------------------------------------------------------------
 //                                                    TESTS IN THE LOWER HALF
