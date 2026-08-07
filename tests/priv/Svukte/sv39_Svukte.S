@@ -27,8 +27,16 @@
 // 8. UKTE enabled, valid RWXU PTE for the lower-half virtual address:
 //        Then, in U-Mode, execute sw, lw & jalr.
 //        Expected: All accesses complete successfully
+// 9. UKTE disabled, valid RWXU PTE for the top-half virtual address:
+//        Then, in M-Mode (mstatus.MPRV set, mstatus.MPP=Umode), execute sw & lw.
+//        Expected: All accesses complete successfully
+// 10. UKTE enabled, valid RWXU PTE for the top-half virtual address:
+//        Then, in M-Mode (mstatus.MPRV set, mstatus.MPP=Umode), execute sw & lw.
+//        Svukte qualification depends on the *effective* privilege mode, so these
+//        accesses are qualified without ever leaving M-Mode.
+//        Expected: Store-page-fault, Load-page-fault
 // --------------------------------------------------------------------------------------------------------------------------------
-// Total Expected Faults :: 15
+// Total Expected Faults :: 17
 // --------------------------------------------------------------------------------------------------------------------------------
 
 ##### START_TEST_CONFIG #####
@@ -36,8 +44,8 @@
 # MARCH: rv64i_zicsr_zifencei
 ##### END_TEST_CONFIG #####
 
-#define SIGUPD_COUNT 24
-#define TRAP_SIGUPD_COUNT 64
+#define SIGUPD_COUNT 28
+#define TRAP_SIGUPD_COUNT 80
 
 
 #include "riscv_arch_test.h"
@@ -99,6 +107,68 @@ RVTEST_BEGIN
   RVTEST_SIGUPD(x2, x5, x4, a4, \TEST_CASE\()_exec, \TEST_CASE\()_exec_str)
 .endm
 
+//---------------------------------------------------------------------------------------------------------------------------------
+// Set mstatus.MPRV=1 and mstatus.MPP=Umode, so that M-mode loads and stores are
+// translated and protected as though the current privilege mode were U.
+//
+// This must be re-applied before every access under test: a trap taken to M-mode
+// overwrites mstatus.MPP with the interrupted privilege mode, so the pair does not
+// survive a faulting access.
+.macro SET_MPRV_UMODE
+  LI(   t0, MSTATUS_MPRV)
+  csrs  mstatus, t0           // mstatus.MPRV = 1
+  LI(   t0, MSTATUS_MPP)
+  csrc  mstatus, t0           // mstatus.MPP  = Umode (0b00)
+.endm
+
+// Test RW permissions from M-mode using MPRV, without ever dropping privilege.
+//
+// mstatus.MPRV does not affect instruction fetch, so only sw/lw are exercised
+// here; there is no jalr case.
+.macro MPRV_TEST_CASES_RUNNER QUAL, VA, level, TEST_CASE
+
+  // Set or clear senvcfg.UKTE for this test case.
+  LI(t0, SENVCFG_UKTE)
+  .ifc \QUAL, Qualified
+    csrs senvcfg, t0
+  .else
+    csrc senvcfg, t0
+  .endif
+
+  // Adjust offset of VA to point to the test region.
+  .set VA_SHIFT, (\level*9)+12
+  LI(a5, (\VA>>VA_SHIFT)<<VA_SHIFT)
+  LA(a0, rvtest_data_1)
+  slli a0, a0, 64-VA_SHIFT
+  srli a0, a0, 64-VA_SHIFT
+  add  a5, a5, a0             // Virtual Address
+
+  // Initialize result register so a fault leaves its sentinel unchanged.
+  LI(a3, 0xdeadbeef)
+  addi a2, a2, 16
+
+  // Test store permission
+  SET_MPRV_UMODE
+  \TEST_CASE\()_store:
+  sw  a2, 20(a5)
+  nop
+
+  // Test load permission
+  SET_MPRV_UMODE
+  \TEST_CASE\()_load:
+  lw  a3, 20(a5)
+  nop
+
+  // Clear mstatus.MPRV so the signature stores below are translated as M-mode
+  // accesses rather than being Svukte-qualified themselves.
+  LI(   t0, MSTATUS_MPRV)
+  csrc  mstatus, t0
+
+  // Signature Update
+  RVTEST_SIGUPD(x2, x5, x4, a2, \TEST_CASE\()_store, \TEST_CASE\()_store_str)
+  RVTEST_SIGUPD(x2, x5, x4, a3, \TEST_CASE\()_load,  \TEST_CASE\()_load_str)
+.endm
+
 
 main:
   LI( a2, 0x800)            // Test signature initialization
@@ -151,6 +221,20 @@ main:
 
   // Test case 4: UKTE enabled | Test in U-Mode | valid RWXU PTE | expected = RWX fault
   TEST_CASES_RUNNER Qualified, va_data, LEVEL2, test4
+
+//---------------------------------------------------------------------------------------------------------------------------------
+//                             MACHINE-MODE TESTS WITH MPRV (effective privilege = Umode)
+//
+// The PTE installed above is still in effect, so it grants RWXU on the top-half
+// region. Any fault below is therefore attributable only to Svukte, not to the
+// page-table contents.
+//---------------------------------------------------------------------------------------------------------------------------------
+
+  // Test case 9: UKTE disabled | Test in M-Mode w/ MPRV | valid RWXU PTE | expected = no fault
+  MPRV_TEST_CASES_RUNNER Unqualified, va_data, LEVEL2, test9
+
+  // Test case 10: UKTE enabled | Test in M-Mode w/ MPRV | valid RWXU PTE | expected = RW fault
+  MPRV_TEST_CASES_RUNNER Qualified, va_data, LEVEL2, test10
 
 //---------------------------------------------------------------------------------------------------------------------------------
 //                                                    TESTS IN THE LOWER HALF
@@ -225,6 +309,10 @@ test7_exec_str:  .string "\"Mismatch during jalr in Test Case 7!\""
 test8_store_str: .string "\"Mismatch during sw in Test Case 8!\""
 test8_load_str:  .string "\"Mismatch during lw in Test Case 8!\""
 test8_exec_str:  .string "\"Mismatch during jalr in Test Case 8!\""
+test9_store_str:  .string "\"Mismatch during sw in Test Case 9!\""
+test9_load_str:   .string "\"Mismatch during lw in Test Case 9!\""
+test10_store_str: .string "\"Mismatch during sw in Test Case 10!\""
+test10_load_str:  .string "\"Mismatch during lw in Test Case 10!\""
 
 RVTEST_DATA_END
 RVTEST_SIG_SETUP
