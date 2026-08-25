@@ -2105,6 +2105,7 @@ adj_\__MODE__\()epc_rtn:
         // advance 4 (bits[1:0]==0b11) or 2 (compressed).
         // xEPC is >=2-byte aligned, so lhu cannot misalign-fault.
   .ifc \__MODE__ , H
+#ifdef RVTEST_HYPERVISOR
         // A trap from VS/VU saves a guest virtual PC in sepc. An ordinary
         // HS-mode load would use satp rather than the guest VS/G-stage
         // translation context, so use HLVX with the SPVP value saved by the
@@ -2123,6 +2124,7 @@ adj_\__MODE__\()epc_rtn:
         csrw    CSR_SENVCFG, T6
         csrw    CSR_VSSTATUS, T4
         j       2f
+#endif
 1:
   .endif
   .ifc \__MODE__ , M
