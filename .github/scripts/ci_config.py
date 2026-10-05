@@ -175,6 +175,7 @@ def discover_configs(config_dir: Path, workdir: Path | None = None) -> list[dict
         apt_packages = sim_config.get("apt_packages", "")
         setup_script = sim_config.get("setup_script", "")
         exclude_configs: set[str] = set(sim_config.get("exclude_configs", []))
+        experimental_configs: set[str] = set(sim_config.get("experimental_configs", []))
         # Number of CI runners to split each config across. Defaults to 1
         # (no sharding). Slow simulators / configs benefit from a higher
         # value — the testsuites are split into N bin-packed shards and
@@ -222,6 +223,7 @@ def discover_configs(config_dir: Path, workdir: Path | None = None) -> list[dict
 
             run_cmd = run_cmd_file.read_text().strip()
             config_file = run_cmd_file.parent / "test_config.yaml"
+            enable_experimental_extensions = config_name in experimental_configs
 
             shards = config_shards.get(config_name, default_shards)
             if shards < 1:
@@ -241,6 +243,7 @@ def discover_configs(config_dir: Path, workdir: Path | None = None) -> list[dict
                         "config_file": str(config_file),
                         "run_cmd": run_cmd,
                         "exclude_extensions": exclude_extensions,
+                        "enable_experimental_extensions": "True" if enable_experimental_extensions else "",
                         "install_script": install_script,
                         "apt_packages": apt_packages,
                         "setup_script": setup_script,

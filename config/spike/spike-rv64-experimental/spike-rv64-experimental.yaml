@@ -3,8 +3,8 @@
 $schema: config_schema.json#
 kind: architecture configuration
 type: fully configured
-name: sail-rv64-max-clang
-description: rv64 with all non-conflicting extensions enabled
+name: spike-rv64-experimental
+description: rv64 with all non-conflicting extensions enabled (including experimental, unratified extensions)
 implemented_extensions:
   - { name: A, version: "= 2.1.0" }
   - { name: B, version: "= 1.0.0" }
@@ -14,10 +14,10 @@ implemented_extensions:
   - { name: H, version: "= 1.0.0" }
   - { name: I, version: "= 2.1" }
   - { name: M, version: "= 2.0" }
-  #  - { name: Q, version: "= 2.2.0" } # sail does not yet support this
+  - { name: Q, version: "= 2.2.0" }
   - { name: S, version: "= 1.13.0" }
   - { name: Sdext, version: "= 1.0.0" }
-  # - { name: Sdtrig, version: "= 1.0.0" } sail does not yet support this
+  - { name: Sdtrig, version: "= 1.0.0" }
   - { name: Sha, version: "= 1.0.0" }
   - { name: Shcounterenw, version: "= 1.0.0" }
   - { name: Shgatpa, version: "= 1.0.0" }
@@ -31,11 +31,10 @@ implemented_extensions:
   - { name: Smcntrpmf, version: "= 1.0.0" }
   - { name: Smcsrind, version: "= 1.0.0" }
   - { name: Smctr, version: "= 1.0.0" }
-  - { name: Smdbltrp, version: "= 1.0.0" }
   - { name: Smepmp, version: "= 1.0.0" }
   - { name: Smmpm, version: "= 1.0.0" }
   - { name: Smnpm, version: "= 1.0.0" }
-  # - { name: Smrnmi, version: "= 1.0.0" } # Sail does not support this extension yet
+  # - { name: Smrnmi, version: "= 1.0.0" } spike does not support Smrnmi
   - { name: Smstateen, version: "= 1.0.0" }
   - { name: Ssaia, version: "= 1.0.0" }
   - { name: Ssccfg, version: "= 1.0.0" }
@@ -49,7 +48,8 @@ implemented_extensions:
   - { name: Sspm, version: "= 1.0.0" }
   - { name: Ssqosid, version: "= 1.0.0" }
   - { name: Ssstateen, version: "= 1.0.0" }
-  - { name: Ssstrict, version: "= 1.0.0" }
+  # - { name: Ssstrict, version: "= 1.0.0" } # Spike does not aim to support Ssstrict as of 8/20/2026
+  # https://github.com/riscv-software-src/riscv-isa-sim/issues/1976#issuecomment-5335375358
   - { name: Sstc, version: "= 1.0.0" }
   - { name: Sstvala, version: "= 1.0.0" }
   - { name: Sstvecd, version: "= 1.0.0" }
@@ -66,8 +66,8 @@ implemented_extensions:
   - { name: Svinval, version: "= 1.0.0" }
   - { name: Svnapot, version: "= 1.0.0" }
   - { name: Svpbmt, version: "= 1.0.0" }
-  - { name: Svrsw60t59b, version: "= 1.0.0" }
   - { name: Svvptc, version: "= 1.0.0" }
+  - { name: Svukte, version: "= 0.4.0" }
   - { name: U, version: "= 1.0.0" }
   - { name: V, version: "= 1.0.0" }
   - { name: Za128rs, version: "= 1.0.0" }
@@ -75,7 +75,7 @@ implemented_extensions:
   - { name: Zaamo, version: "= 1.0.0" }
   - { name: Zabha, version: "= 1.0.0" }
   - { name: Zacas, version: "= 1.0.0" }
-  #  - { name: Zalasr, version: "= 1.0.0" }
+  - { name: Zalasr, version: "= 1.0.0" }
   - { name: Zalrsc, version: "= 1.0.0" }
   - { name: Zama16b, version: "= 1.0.0" }
   - { name: Zawrs, version: "= 1.0.0" }
@@ -152,10 +152,6 @@ implemented_extensions:
   - { name: Zvl32b, version: "= 1.0.0" }
   - { name: Zvl64b, version: "= 1.0.0" }
   - { name: Zvl128b, version: "= 1.0.0" }
-  - { name: Zvl256b, version: "= 1.0.0" }
-  - { name: Zvl512b, version: "= 1.0.0" }
-  - { name: Zvl1024b, version: "= 1.0.0" }
-
 params:
   NON_STANDARD_EXTENSION_IMPLEMENTED: false
   # A params
@@ -163,7 +159,7 @@ params:
   LRSC_RESERVATION_STRATEGY: "reserve exactly enough to cover the access"
   LRSC_FAIL_ON_VA_SYNONYM: false
   LRSC_MISALIGNED_BEHAVIOR: "always raise access fault"
-  LRSC_FAIL_ON_NON_EXACT_LRSC: false
+  LRSC_FAIL_ON_NON_EXACT_LRSC: true
   MUTABLE_MISA_A: false
   # M params
   MUTABLE_MISA_M: false
@@ -174,7 +170,7 @@ params:
   # D params
   MUTABLE_MISA_D: false
   # Q params
-  #  MUTABLE_MISA_Q: false # depends on Q extension which sail does not yet support
+  MUTABLE_MISA_Q: false
   # C params
   MUTABLE_MISA_C: false
   # B params
@@ -188,7 +184,7 @@ params:
   # Zicntr params
   TIME_CSR_IMPLEMENTED: true
   # U params
-  WFI_U_MODE: true
+  WFI_U_MODE: false
   MUTABLE_MISA_U: false
   U_MODE_ENDIANNESS: dynamic
   UXLEN: [64]
@@ -266,11 +262,11 @@ params:
   TRAP_ON_ECALL_FROM_M: true
   TRAP_ON_EBREAK: true
   MARCHID_IMPLEMENTED: true
-  ARCH_ID_VALUE: 0x24
+  ARCH_ID_VALUE: 0x5
   MIMPID_IMPLEMENTED: true
-  IMP_ID_VALUE: 0x100
-  VENDOR_ID_BANK: 0xC
-  VENDOR_ID_OFFSET: 0x2
+  IMP_ID_VALUE: 0
+  VENDOR_ID_BANK: 0
+  VENDOR_ID_OFFSET: 0
   MISALIGNED_LDST: true
   MISALIGNED_LDST_EXCEPTION_PRIORITY: low
   MISALIGNED_MAX_ATOMICITY_GRANULE_SIZE: 4096
@@ -442,7 +438,7 @@ params:
     ]
   # Vector params
   MUTABLE_MISA_V: false
-  VLEN: 1024
+  VLEN: 128
   ELEN: 64
   FOLLOW_VTYPE_RESET_RECOMMENDATION: true
   HW_MSTATUS_VS_DIRTY_UPDATE: precise
@@ -568,15 +564,15 @@ params:
   REPORT_CAUSE_IN_STVAL_ON_SHADOW_STACK_SOFTWARE_CHECK: true
   REPORT_CAUSE_IN_VSTVAL_ON_SHADOW_STACK_SOFTWARE_CHECK: true
   # Sdtrig params
-  #DBG_HCONTEXT_WIDTH: 14
-  #DBG_SCONTEXT_WIDTH: 32
-  #DCSR_MPRVEN_TYPE: rw
-  #DCSR_STEPIE_TYPE: rw
-  #DCSR_STOPCOUNT_TYPE: rw
-  #DCSR_STOPTIME_TYPE: rw
-  #HCONTEXT_AVAILABLE: true
-  #HSTATEEN_CONTEXT_TYPE: rw
-  #MCONTEXT_AVAILABLE: true
+  DBG_HCONTEXT_WIDTH: 14
+  DBG_SCONTEXT_WIDTH: 32
+  DCSR_MPRVEN_TYPE: rw
+  DCSR_STEPIE_TYPE: rw
+  DCSR_STOPCOUNT_TYPE: rw
+  DCSR_STOPTIME_TYPE: rw
+  HCONTEXT_AVAILABLE: true
+  HSTATEEN_CONTEXT_TYPE: rw
+  MCONTEXT_AVAILABLE: true
   # Pointer masking params
   SUPPORTED_PMLEN_SMMPM: [0, 7, 16]
   SUPPORTED_PMLEN_SMNPM: [0, 7, 16]
@@ -586,7 +582,7 @@ params:
   RCID_WIDTH: 12
   # Smstateen params
   MSTATEEN_ENVCFG_TYPE: rw
-  #MSTATEEN_CONTEXT_TYPE: rw
+  MSTATEEN_CONTEXT_TYPE: rw
   # Csrind params
   HSTATEEN_CSRIND_TYPE: rw
   MSTATEEN_CSRIND_TYPE: rw

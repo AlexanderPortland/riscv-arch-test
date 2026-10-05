@@ -4,7 +4,7 @@ $schema: config_schema.json#
 kind: architecture configuration
 type: fully configured
 name: spike-rv64-max
-description: rv64 with all non-conflicting extensions enabled
+description: rv64 with all non-conflicting & non-experimental extensions enabled
 implemented_extensions:
   - { name: A, version: "= 2.1.0" }
   - { name: B, version: "= 1.0.0" }
@@ -67,7 +67,6 @@ implemented_extensions:
   - { name: Svnapot, version: "= 1.0.0" }
   - { name: Svpbmt, version: "= 1.0.0" }
   - { name: Svvptc, version: "= 1.0.0" }
-  - { name: Svukte, version: "= 0.4.0" }
   - { name: U, version: "= 1.0.0" }
   - { name: V, version: "= 1.0.0" }
   - { name: Za128rs, version: "= 1.0.0" }
